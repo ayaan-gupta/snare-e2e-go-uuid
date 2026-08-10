@@ -4,8 +4,6 @@
 
 package uuid
 
-import "encoding/binary"
-
 // UUID version 6 is a field-compatible version of UUIDv1, reordered for improved DB locality.
 // It is expected that UUIDv6 will primarily be used in contexts where there are existing v1 UUIDs.
 // Systems that do not involve legacy UUIDv1 SHOULD consider using UUIDv7 instead.
@@ -25,25 +23,20 @@ func NewV6() (UUID, error) {
 		return uuid, err
 	}
 
-	/*
-	    0                   1                   2                   3
-	    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	   |                           time_high                           |
-	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	   |           time_mid            |      time_low_and_version     |
-	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	   |clk_seq_hi_res |  clk_seq_low  |         node (0-1)            |
-	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	   |                         node (2-5)                            |
-	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	*/
+	// RFC 9562 places the 60-bit timestamp in three fields around the
+	// version nibble: timestamp[59:28], timestamp[27:12], timestamp[11:0].
+	timestamp := uint64(now)
+	uuid[0] = byte(timestamp >> 52)
+	uuid[1] = byte(timestamp >> 44)
+	uuid[2] = byte(timestamp >> 36)
+	uuid[3] = byte(timestamp >> 28)
+	uuid[4] = byte(timestamp >> 20)
+	uuid[5] = byte(timestamp >> 12)
+	uuid[6] = 0x60 | byte(timestamp>>8&0x0f)
+	uuid[7] = byte(timestamp)
 
-	binary.BigEndian.PutUint64(uuid[0:], uint64(now))
-	binary.BigEndian.PutUint16(uuid[8:], seq)
-
-	uuid[6] = 0x60 | (uuid[6] & 0x0F)
-	uuid[8] = 0x80 | (uuid[8] & 0x3F)
+	uuid[8] = 0x80 | byte(seq>>8&0x3f)
+	uuid[9] = byte(seq)
 
 	nodeMu.Lock()
 	if nodeID == zeroID {
